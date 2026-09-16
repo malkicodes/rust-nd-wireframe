@@ -22,13 +22,21 @@ pub struct Scene {
 
 impl Scene {
     pub fn setup(args: &[String]) -> Self {
+        let given_polytope_path = args.get(1).cloned();
+
         // if you can read setup.toml
         if let Ok(bytes) = fs::read("./setup.toml") {
             let scene_config: SceneConfig =
                 toml::from_slice(&bytes).expect("error reading setup.toml");
 
             // convert SceneConfig -> Scene and return
-            return scene_config.into();
+            let mut scene: Scene = scene_config.into();
+
+            if let Some(polytope_path) = given_polytope_path {
+                scene.polytope_path = polytope_path;
+            }
+
+            return scene;
         }
 
         let setup_file_contents = match fs::read_to_string("./setup.txt") {
@@ -42,11 +50,7 @@ impl Scene {
 
         Scene {
             polytopes_folder: lines[0].to_string(),
-            polytope_path: if args.len() < 2 {
-                lines[1].to_string()
-            } else {
-                args[1].clone()
-            },
+            polytope_path: given_polytope_path.unwrap_or_else(|| lines[1].to_string()),
             resolution: lines[2].parse().unwrap(),
             frame_count: lines[3].parse().unwrap(),
             min_dimension: lines[4].parse().unwrap(),
