@@ -16,9 +16,9 @@ pub fn draw_triangle_color(
     let context = unsafe { get_internal_gl() };
 
     let vertices = [
-        Vertex::new(v1.x, v1.y, 0., 0., 0., color1),
-        Vertex::new(v2.x, v2.y, 0., 0., 0., color2),
-        Vertex::new(v3.x, v3.y, 0., 0., 0., color3),
+        Vertex::new(v1.x, v1.y, 0.0, 0.0, 0.0, color1),
+        Vertex::new(v2.x, v2.y, 0.0, 0.0, 0.0, color2),
+        Vertex::new(v3.x, v3.y, 0.0, 0.0, 0.0, color3),
     ];
 
     let indices: [u16; 3] = [0, 1, 2];

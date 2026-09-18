@@ -5,9 +5,9 @@ use nalgebra::DVector;
 
 pub fn color_from_hue(hue: f32) -> Color {
     // originally (5. + hue * 6.) / 6. but i simplified it -malki
-    let kr = f32::fract(5. / 6. + hue) * 6.0;
-    let kg = f32::fract(3. / 6. + hue) * 6.0;
-    let kb = f32::fract(1. / 6. + hue) * 6.0;
+    let kr = f32::fract(5.0 / 6.0 + hue) * 6.0;
+    let kg = f32::fract(3.0 / 6.0 + hue) * 6.0;
+    let kb = f32::fract(1.0 / 6.0 + hue) * 6.0;
 
     let r = 1.0 - f32::min(kr, 4.0 - kr).clamp(0.0, 1.0);
     let g = 1.0 - f32::min(kg, 4.0 - kg).clamp(0.0, 1.0);
