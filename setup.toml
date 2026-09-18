@@ -1,0 +1,12 @@
+polytopes_folder = "./polytopes/4D"
+polytope_path = "./polytopes/4D/6 op 5-cell.off"
+
+min_dimension = 4
+
+[animation]
+resolution = 1200
+frame_count = 80
+
+[facet_expansion]
+amount = 0.8
+rank = -1
