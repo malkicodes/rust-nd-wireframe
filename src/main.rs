@@ -1,21 +1,16 @@
-use macroquad::audio::load_sound_from_bytes;
-use macroquad::audio::play_sound_once;
+use macroquad::audio::{load_sound_from_bytes, play_sound_once};
 use macroquad::miniquad::window::set_window_size;
 use macroquad::prelude::*;
 use macroquad::rand::srand;
-use na::Vector2;
-use nalgebra::VecStorage;
-use nalgebra::{self as na, DMatrix, DVector};
+use nalgebra::{DMatrix, DVector, VecStorage, Vector2};
 use std::env;
 use std::f32::consts::TAU;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
-use std::vec;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::loader::*;
-use crate::math::*;
-use crate::render::*;
-use crate::scene::*;
+use crate::loader::load_polytope;
+use crate::math::rotate_matrix;
+use crate::render::render;
+use crate::scene::Scene;
 
 mod color;
 mod loader;

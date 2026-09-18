@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use macroquad::{color::*, rand::ChooseRandom};
+use macroquad::{
+    color::{Color, MAGENTA, WHITE},
+    rand::ChooseRandom,
+};
 use nalgebra::DVector;
 use walkdir::{DirEntry, WalkDir};
 

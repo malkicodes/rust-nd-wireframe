@@ -1,9 +1,9 @@
 use macroquad::prelude::*;
 use nalgebra::{DMatrix, DVector};
 
-use crate::color::*;
-use crate::math::*;
-use crate::scene::*;
+use crate::color::{color_from_wv, fade_from_depth};
+use crate::math::{distance_from_nvolume, project_vertex};
+use crate::scene::Scene;
 
 pub fn draw_triangle_color(
     v1: Vec2,
