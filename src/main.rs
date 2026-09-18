@@ -23,8 +23,6 @@ const DONE_SOUND_BYTES: &[u8] = include_bytes!(".././done.wav");
 #[allow(clippy::cast_precision_loss)]
 #[macroquad::main("nD Renderer")]
 async fn main() {
-    let args: Vec<String> = env::args().collect();
-
     // Create folders if they do not exist already
     std::fs::create_dir_all("./images").unwrap();
     std::fs::create_dir_all("./polytopes").unwrap();
@@ -36,7 +34,7 @@ async fn main() {
             .as_secs(),
     ); // Change macroquads random seed to prevent choosing the same sequence of polytopes
 
-    let mut scene = Scene::setup(&args);
+    let mut scene = Scene::setup(env::args());
 
     load_polytope(&mut scene, false);
 
@@ -255,7 +253,7 @@ async fn main() {
             load_polytope(&mut scene, false);
         }
         if is_key_pressed(KeyCode::Key0) {
-            scene = Scene::setup(&args);
+            scene = Scene::setup(env::args());
             load_polytope(&mut scene, false);
             if scene.dimension != shape_position.nrows() {
                 shape_matrix = DMatrix::identity(scene.dimension, scene.dimension);

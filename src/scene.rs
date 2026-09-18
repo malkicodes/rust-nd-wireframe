@@ -21,8 +21,8 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn setup(args: &[String]) -> Self {
-        let given_polytope_path = args.get(1).cloned();
+    pub fn setup(mut args: impl Iterator<Item = String>) -> Self {
+        let given_polytope_path = args.nth(1);
 
         // if you can read setup.toml
         if let Ok(bytes) = fs::read("./setup.toml") {
