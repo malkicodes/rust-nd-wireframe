@@ -82,7 +82,11 @@ pub fn load_polytope(scene: &mut Scene, random: bool) {
     let contents: String = std::fs::read_to_string(scene.polytope_path.as_str())
         .expect("File cannot be found or doesnt exist!!!!");
 
-    let (polytope_vertices, polytope_data, rank) = load_polytope_data(scene, &contents);
+    let LoadPolytopeDataOutput {
+        polytope_vertices,
+        polytope_data,
+        rank,
+    } = load_polytope_data(scene, &contents);
 
     // we now have the polytope_data.
     // polytope_data stores the faces, then the cells, tera, etc. Its length is 2 less than the rank.
@@ -116,10 +120,13 @@ fn set_random_polytope(scene: &mut Scene) {
     println!("Chose {polytope_name}");
 }
 
-fn load_polytope_data(
-    scene: &mut Scene,
-    contents: &str,
-) -> (Vec<DVector<f32>>, Vec<Vec<Vec<usize>>>, u8) {
+struct LoadPolytopeDataOutput {
+    polytope_vertices: Vec<DVector<f32>>,
+    polytope_data: Vec<Vec<Vec<usize>>>,
+    rank: u8,
+}
+
+fn load_polytope_data(scene: &mut Scene, contents: &str) -> LoadPolytopeDataOutput {
     // vertices
     let mut polytope_vertices: Vec<DVector<f32>> = Vec::new();
     // rank, element, indices referencing previous rank
@@ -284,7 +291,11 @@ fn load_polytope_data(
         }
     }
 
-    (polytope_vertices, polytope_data, rank)
+    LoadPolytopeDataOutput {
+        polytope_vertices,
+        polytope_data,
+        rank,
+    }
 }
 
 fn expand_facets(
