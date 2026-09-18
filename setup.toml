@@ -8,5 +8,5 @@ resolution = 1200
 frame_count = 80
 
 [facet_expansion]
-amount = 0.8
+amount = 0.0
 rank = -1
