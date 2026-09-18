@@ -61,6 +61,7 @@ pub fn draw_variable_width_line(
     }
 }
 
+#[allow(clippy::cast_precision_loss)]
 pub fn render(
     scene: &Scene,
     subdivisions: i32,
@@ -72,7 +73,7 @@ pub fn render(
     zoom: f32,
     w_scale: f32,
     render_size: f32,
-    screen_size: &Vec2,
+    screen_size: Vec2,
 ) {
     clear_background(BLACK);
 
@@ -92,8 +93,8 @@ pub fn render(
         let vertex_b = &local_space_vertices[scene.edges[i + 1]];
 
         for s in 0..subdivisions {
-            let vertex_1 = vertex_a.lerp(&vertex_b, (s as f32) / (subdivisions as f32));
-            let vertex_2 = vertex_a.lerp(&vertex_b, ((s + 1) as f32) / (subdivisions as f32));
+            let vertex_1 = vertex_a.lerp(vertex_b, (s as f32) / (subdivisions as f32));
+            let vertex_2 = vertex_a.lerp(vertex_b, ((s + 1) as f32) / (subdivisions as f32));
 
             let radius_1 = (screen_size.y * edge_width) / vertex_1[2];
             let radius_2 = (screen_size.y * edge_width) / vertex_2[2];
@@ -107,8 +108,8 @@ pub fn render(
             color_2.a *= 1.0 - (distance_from_nvolume(&vertex_2, 5) * w_scale).clamp(0.0, 1.0);
 
             draw_variable_width_line(
-                project_vertex(&vertex_1, render_size, screen_size.clone()),
-                project_vertex(&vertex_2, render_size, screen_size.clone()),
+                project_vertex(&vertex_1, render_size, screen_size),
+                project_vertex(&vertex_2, render_size, screen_size),
                 radius_1 * render_size,
                 radius_2 * render_size,
                 color_1,

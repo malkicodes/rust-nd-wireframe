@@ -23,6 +23,9 @@ mod math;
 mod render;
 mod scene;
 
+const DONE_SOUND_BYTES: &[u8] = include_bytes!(".././done.wav");
+
+#[allow(clippy::cast_precision_loss)]
 #[macroquad::main("nD Renderer")]
 async fn main() {
     let args: Vec<String> = env::args().collect();
@@ -37,8 +40,6 @@ async fn main() {
             .unwrap()
             .as_secs(),
     ); // Change macroquads random seed to prevent choosing the same sequence of polytopes
-
-    const DONE_SOUND_BYTES: &[u8] = include_bytes!(".././done.wav");
 
     let mut scene = Scene::setup(&args);
 
@@ -93,30 +94,6 @@ async fn main() {
             mouse_lock = !mouse_lock;
             set_cursor_grab(mouse_lock);
             show_mouse(!mouse_lock);
-        }
-
-        fn mouse_control(
-            previous_mouse_pos: Vector2<f32>,
-            dimension: usize,
-            shape_matrix: DMatrix<f32>,
-            axis: usize,
-            sensitivity: f32,
-        ) -> DMatrix<f32> {
-            if axis < dimension {
-                return rotate_matrix(
-                    1,
-                    axis,
-                    (mouse_position().1 - previous_mouse_pos.y) * -sensitivity,
-                    dimension,
-                ) * rotate_matrix(
-                    0,
-                    axis,
-                    (mouse_position().0 - previous_mouse_pos.x) * sensitivity,
-                    dimension,
-                ) * shape_matrix;
-            } else {
-                return shape_matrix;
-            }
         }
 
         if mouse_lock
@@ -328,7 +305,7 @@ async fn main() {
                 zoom,
                 w_scale,
                 render_size,
-                &vec2(scene.resolution_vector.x, scene.resolution_vector.y),
+                Vec2::new(scene.resolution_vector.x, scene.resolution_vector.y),
             );
 
             // go back to the screen
@@ -347,7 +324,7 @@ async fn main() {
             zoom,
             w_scale,
             render_size,
-            &vec2(screen_width(), screen_height()),
+            Vec2::new(screen_width(), screen_height()),
         );
 
         if image_index > -1 {
@@ -376,7 +353,7 @@ async fn main() {
                 // Force saved image to have no transparency
                 pix[3] = 255;
             }
-            img.export_png(&format!("./images/{:03}.png", image_index));
+            img.export_png(&format!("./images/{image_index:03}.png"));
 
             image_index += 1;
         }
@@ -420,12 +397,14 @@ async fn main() {
             // Start
             image_index = -1;
 
-            if !std::path::Path::new("./rotations.txt").exists() {
-                panic!("no rotations.txt file!!!!");
-            }
-            if !std::path::Path::new("./motion.txt").exists() {
-                panic!("no motion.txt file!!!!");
-            }
+            assert!(
+                std::path::Path::new("./rotations.txt").exists(),
+                "no rotations.txt file!!!!"
+            );
+            assert!(
+                std::path::Path::new("./motion.txt").exists(),
+                "no motion.txt file!!!!"
+            );
 
             let rotation_file_contents = std::fs::read_to_string("./rotations.txt").unwrap();
 
@@ -439,7 +418,7 @@ async fn main() {
                 let mut value_count = 0;
 
                 // go through the line of text to find the numbers
-                for number_string in line.split(" ") {
+                for number_string in line.split(' ') {
                     let number: usize = number_string.parse().unwrap();
 
                     rotation_file_values.push(number);
@@ -468,10 +447,9 @@ async fn main() {
             starting_position.clear();
             motion.clear();
 
-            let mut index = 0;
-            for line in motion_file_contents.lines() {
+            for (index, line) in motion_file_contents.lines().enumerate() {
                 // go through the line of text to find the numbers
-                for number_string in line.split(" ") {
+                for number_string in line.split(' ') {
                     let number: f32 = number_string.parse().unwrap();
 
                     if index == 0 {
@@ -480,8 +458,6 @@ async fn main() {
                         motion.push(number);
                     }
                 }
-
-                index += 1;
             }
 
             for i in 0..starting_position.len() {
@@ -491,6 +467,30 @@ async fn main() {
             }
         }
 
-        next_frame().await
+        next_frame().await;
+    }
+}
+
+fn mouse_control(
+    previous_mouse_pos: Vector2<f32>,
+    dimension: usize,
+    shape_matrix: DMatrix<f32>,
+    axis: usize,
+    sensitivity: f32,
+) -> DMatrix<f32> {
+    if axis < dimension {
+        rotate_matrix(
+            1,
+            axis,
+            (mouse_position().1 - previous_mouse_pos.y) * -sensitivity,
+            dimension,
+        ) * rotate_matrix(
+            0,
+            axis,
+            (mouse_position().0 - previous_mouse_pos.x) * sensitivity,
+            dimension,
+        ) * shape_matrix
+    } else {
+        shape_matrix
     }
 }

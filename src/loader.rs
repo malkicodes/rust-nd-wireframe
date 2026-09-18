@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use macroquad::{color::*, rand::ChooseRandom};
 use nalgebra::DVector;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 use crate::Scene;
 
@@ -14,8 +14,7 @@ fn get_vertices_from_element(
     index: usize,
 ) {
     // loop through the facet
-    let mut i = 0;
-    for sub_element in &polytope_data[rank - 2][index] {
+    for (i, sub_element) in polytope_data[rank - 2][index].iter().enumerate() {
         if rank == 2 {
             // Faces, add vertices
             element_vertices.push(*sub_element);
@@ -40,9 +39,9 @@ fn get_vertices_from_element(
             );
 
             // Merge faces and other elements correctly
-            for vertex in sub_vertices.iter() {
+            for vertex in &sub_vertices {
                 if !element_vertices.contains(vertex) {
-                    element_vertices.push(vertex.clone());
+                    element_vertices.push(*vertex);
                 }
             }
             for edge in (0..sub_edges.len()).step_by(2) {
@@ -68,18 +67,16 @@ fn get_vertices_from_element(
                 }
             }
         }
-
-        i += 1;
     }
 }
 
-pub fn load_polytope(scene: &mut Scene, rand: bool) {
-    if rand {
+pub fn load_polytope(scene: &mut Scene, random: bool) {
+    if random {
         let files: Vec<PathBuf> = WalkDir::new(scene.polytopes_folder.as_str())
             .into_iter()
-            .filter_map(|entry| entry.ok()) // Ignore unreadable files/directories
+            .filter_map(Result::ok) // Ignore unreadable files/directories
             .filter(|entry| entry.file_type().is_file()) // Filter out directories
-            .map(|entry| entry.into_path()) // Convert WalkDir Entry to PathBuf
+            .map(DirEntry::into_path) // Convert WalkDir Entry to PathBuf
             .collect();
 
         let file = files
@@ -89,14 +86,12 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
         scene.polytope_path = file.display().to_string();
 
         let mut polytope_name = scene.polytope_path.clone();
-        polytope_name = polytope_name.replace("\\", "/");
-        let path_chunks = polytope_name.split("/");
-        polytope_name = path_chunks
-            .last()
-            .expect("failed to get polytope name")
+        polytope_name = polytope_name
+            .rsplit_once(['/', '\\'])
+            .map_or_else(|| polytope_name.as_str(), |x| x.1)
             .to_string();
 
-        println!("Chose {}", polytope_name);
+        println!("Chose {polytope_name}");
     }
 
     let contents: String = std::fs::read_to_string(scene.polytope_path.as_str())
@@ -114,7 +109,7 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
     let mut polytope_data: Vec<Vec<Vec<usize>>> = vec![];
 
     for line in contents.lines() {
-        if line.starts_with("#") {
+        if line.starts_with('#') {
             continue;
         }
 
@@ -132,14 +127,14 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
                 // If done reading edges (faces), continue or stop depending on facet_expansion
                 if scene.facet_expansion == 0.0 {
                     break;
-                } else {
-                    state += 1;
-                    if state > rank {
-                        break;
-                    } else {
-                        polytope_data.push(vec![]);
-                    }
                 }
+
+                state += 1;
+                if state > rank {
+                    break;
+                }
+
+                polytope_data.push(vec![]);
             }
 
             continue;
@@ -151,10 +146,10 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
                                      // it means I have to take time out of MY day to add an edge case for it every single time I
                                      // make an OFF importer. AGH.
             } else {
-                scene.dimension = line[..line.len() - 3].parse().unwrap();
+                scene.dimension = line.strip_suffix("OFF").unwrap().parse().unwrap();
             }
 
-            rank = scene.dimension as u8;
+            rank = u8::try_from(scene.dimension).unwrap();
 
             if scene.dimension < scene.min_dimension {
                 scene.dimension = scene.min_dimension;
@@ -187,7 +182,7 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
         if state == 2 {
             let mut vertex: Vec<f32> = vec![];
 
-            for coordinate in line.split(" ") {
+            for coordinate in line.split(' ') {
                 if !coordinate.is_empty() {
                     vertex.push(coordinate.parse().unwrap());
                 }
@@ -206,16 +201,13 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
             let mut face: Vec<usize> = vec![];
 
             // go through the line of text to find the indices
-            let mut index = 0;
-            for number_string in line.split(" ") {
+            for (i, number_string) in line.split(' ').enumerate() {
                 let number: usize = number_string.parse().unwrap();
 
                 // the first one is the size of the face. who needs that? I have .len() and I'm not afraid to use it.
-                if index != 0 {
+                if i != 0 {
                     face.push(number);
                 }
-
-                index += 1;
             }
 
             polytope_data[0].push(face.clone());
@@ -255,16 +247,13 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
             let mut element: Vec<usize> = vec![];
 
             // go through the line of text to find the indices
-            let mut index = 0;
-            for number_string in line.split(" ") {
+            for (index, number_string) in line.split(' ').enumerate() {
                 let number: usize = number_string.parse().unwrap();
 
                 // the first one is the size of the element. who needs that? I have .len() and I'm not afraid to use it.
                 if index != 0 {
                     element.push(number);
                 }
-
-                index += 1;
             }
 
             polytope_data[(state - 3) as usize].push(element);
@@ -283,13 +272,13 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
                 &polytope_data,
                 &mut facet_vertices,
                 &mut facet_edges,
-                scene.facet_expansion_rank as usize,
+                scene.facet_expansion_rank,
                 facet,
             );
 
             // once that is done, loop over all the facet_vertices to determine the center.
             let mut facet_center: DVector<f32> = DVector::zeros(scene.dimension);
-            for vertex in facet_vertices.iter() {
+            for vertex in &facet_vertices {
                 facet_center += &polytope_vertices[*vertex];
             }
             facet_center /= facet_vertices.len() as f32;
@@ -300,14 +289,14 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
             let past_vertex_count = scene.vertices.len();
 
             // loop over them again, subtracting each one by the center, multiplying by facet_expansion, and then adding the center
-            for vertex in facet_vertices.iter() {
+            for vertex in &facet_vertices {
                 scene.vertices.push(
                     ((&polytope_vertices[*vertex] - &facet_center) * scene.facet_expansion)
                         + &facet_center,
                 );
             }
 
-            for edge in facet_edges.iter() {
+            for edge in &facet_edges {
                 // These variables are very poorly named, so I will explain
                 // past_vertex_count is the number of vertices before a facet, so that's our starting point
                 // we have edges as references to vertex IDs in the global polytope
@@ -415,6 +404,6 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
             }
         }
     } else {
-        scene.vertices = polytope_vertices.clone();
+        scene.vertices = polytope_vertices;
     }
 }

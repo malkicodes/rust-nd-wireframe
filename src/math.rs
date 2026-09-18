@@ -15,7 +15,7 @@ pub fn rotate_matrix(
     matrix[axis_1 + (axis_2 * dimension)] = -f32::sin(angle_in_radians);
     matrix[axis_2 + (axis_2 * dimension)] = f32::cos(angle_in_radians);
 
-    return matrix;
+    matrix
 }
 
 pub fn project_vertex(vertex: &DVector<f32>, render_size: f32, screen_size: Vec2) -> Vec2 {
@@ -31,10 +31,9 @@ pub fn distance_from_nvolume(vertex: &DVector<f32>, n: usize) -> f32 {
         return 0.0;
     }
 
-    let mut distance: f32 = 0.0;
-    for axis in 0..(vertex.len() - n) {
-        distance += vertex[axis + n] * vertex[axis + n];
-    }
+    let distance: f32 = (0..(vertex.len() - n))
+        .map(|axis| vertex[axis + n] * vertex[axis + n])
+        .sum();
 
     f32::sqrt(distance)
 }

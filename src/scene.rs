@@ -43,7 +43,7 @@ impl Scene {
             Ok(v) => v,
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => panic!("no setup.txt file!!!!"),
-                _ => panic!("could not read setup.txt: {}", err),
+                _ => panic!("could not read setup.txt: {err}"),
             },
         };
         let lines: Vec<&str> = setup_file_contents.lines().collect();
@@ -55,7 +55,7 @@ impl Scene {
             frame_count: lines[3].parse().unwrap(),
             min_dimension: lines[4].parse().unwrap(),
             facet_expansion: lines[5].parse().unwrap(),
-            facet_expansion_rank: lines[6].parse::<isize>().unwrap() as usize, // converts negative values to super high (integer underflow) ones. necessary for relative to rank values
+            facet_expansion_rank: lines[6].parse::<isize>().unwrap().cast_unsigned(), // converts negative values to super high (integer underflow) ones. necessary for relative to rank values
             dimension: 0,
             vertices: vec![],
             edges: vec![],
@@ -84,6 +84,7 @@ struct SceneConfig {
 }
 
 impl From<SceneConfig> for Scene {
+    #[allow(clippy::cast_precision_loss)]
     fn from(value: SceneConfig) -> Self {
         Scene {
             polytopes_folder: value.polytopes_folder,
@@ -92,7 +93,7 @@ impl From<SceneConfig> for Scene {
             frame_count: value.animation.frame_count,
             min_dimension: value.min_dimension,
             facet_expansion: value.facet_expansion.facet_expansion,
-            facet_expansion_rank: value.facet_expansion.facet_expansion_rank as usize, // converts negative values to super high (integer underflow) ones. necessary for relative to rank values
+            facet_expansion_rank: value.facet_expansion.facet_expansion_rank.cast_unsigned(), // converts negative values to super high (integer underflow) ones. necessary for relative to rank values
             dimension: 0,
             vertices: vec![],
             edges: vec![],
