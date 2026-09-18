@@ -6,12 +6,10 @@ use macroquad::rand::srand;
 use na::Vector2;
 use nalgebra::VecStorage;
 use nalgebra::{self as na, DMatrix, DVector};
-use std;
 use std::env;
 use std::f32::consts::TAU;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
-use std::usize;
 use std::vec;
 
 use crate::loader::*;
