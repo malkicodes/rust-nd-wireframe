@@ -102,7 +102,8 @@ fn set_random_polytope(scene: &mut Scene) {
         .into_iter()
         .filter_map(Result::ok) // Ignore unreadable files/directories
         .filter(|entry| entry.file_type().is_file()) // Filter out directories
-        .map(DirEntry::into_path) // Convert WalkDir Entry to PathBuf
+        .map(DirEntry::into_path)
+        .filter(|path| path.to_str().is_none_or(|it| it != scene.polytope_path)) // Convert WalkDir Entry to PathBuf
         .collect();
 
     let file = files
@@ -136,11 +137,10 @@ fn load_polytope_data(scene: &mut Scene, contents: &str) -> LoadPolytopeDataOutp
     let mut rank: u8 = 0;
     let mut full_lines_seen: u32 = 0;
 
-    for line in contents.lines() {
-        if line.starts_with('#') {
-            continue;
-        }
-
+    for line in contents
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+    {
         if line.is_empty() {
             if state == 1 {
                 // If done reading rank, start reading vertices
