@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{ffi::OsStr, path::PathBuf};
 
 use macroquad::{
     color::{Color, MAGENTA, WHITE},
@@ -79,7 +79,7 @@ pub fn load_polytope(scene: &mut Scene, random: bool) {
         set_random_polytope(scene);
     }
 
-    let contents: String = std::fs::read_to_string(scene.polytope_path.as_str())
+    let contents: String = std::fs::read_to_string(&scene.polytope_path)
         .expect("File cannot be found or doesnt exist!!!!");
 
     let LoadPolytopeDataOutput {
@@ -98,25 +98,25 @@ pub fn load_polytope(scene: &mut Scene, random: bool) {
 }
 
 fn set_random_polytope(scene: &mut Scene) {
-    let files: Vec<PathBuf> = WalkDir::new(scene.polytopes_folder.as_str())
+    let files: Vec<PathBuf> = WalkDir::new(&scene.polytopes_folder)
         .into_iter()
         .filter_map(Result::ok) // Ignore unreadable files/directories
         .filter(|entry| entry.file_type().is_file()) // Filter out directories
         .map(DirEntry::into_path)
-        .filter(|path| path.to_str().is_none_or(|it| it != scene.polytope_path)) // Convert WalkDir Entry to PathBuf
+        .filter(|path| path.as_path() != scene.polytope_path.as_path()) // Convert WalkDir Entry to PathBuf
         .collect();
 
     let file = files
         .choose()
         .expect("File cannot be found or doesnt exist!!!!");
 
-    scene.polytope_path = file.display().to_string();
+    scene.polytope_path.clone_from(file); // equivalent to scene.polytope.path = file.clone() but supposedly faster
 
-    let mut polytope_name = scene.polytope_path.clone();
-    polytope_name = polytope_name
-        .rsplit_once(['/', '\\'])
-        .map_or_else(|| polytope_name.as_str(), |x| x.1)
-        .to_string();
+    let polytope_name = scene
+        .polytope_path
+        .file_name()
+        .unwrap_or_else(|| OsStr::new("error getting file name"))
+        .to_string_lossy();
 
     println!("Chose {polytope_name}");
 }

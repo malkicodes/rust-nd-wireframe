@@ -1,4 +1,4 @@
-use std::{fs, io};
+use std::{fs, io, path::PathBuf};
 
 use macroquad::color::Color;
 use nalgebra::{DVector, Vector2};
@@ -6,8 +6,8 @@ use serde::Deserialize;
 
 #[derive(Debug)]
 pub struct Scene {
-    pub polytopes_folder: String,
-    pub polytope_path: String,
+    pub polytopes_folder: PathBuf,
+    pub polytope_path: PathBuf,
     pub resolution: u32,
     pub frame_count: i32,
     pub facet_expansion: f32,
@@ -22,7 +22,7 @@ pub struct Scene {
 
 impl Scene {
     pub fn setup(mut args: impl Iterator<Item = String>) -> Self {
-        let given_polytope_path = args.nth(1);
+        let given_polytope_path: Option<PathBuf> = args.nth(1).map(Into::into);
 
         // if you can read setup.toml
         if let Ok(bytes) = fs::read("./setup.toml") {
@@ -49,8 +49,8 @@ impl Scene {
         let lines: Vec<&str> = setup_file_contents.lines().collect();
 
         Scene {
-            polytopes_folder: lines[0].to_string(),
-            polytope_path: given_polytope_path.unwrap_or_else(|| lines[1].to_string()),
+            polytopes_folder: lines[0].into(),
+            polytope_path: given_polytope_path.unwrap_or_else(|| lines[1].into()),
             resolution: lines[2].parse().unwrap(),
             frame_count: lines[3].parse().unwrap(),
             min_dimension: lines[4].parse().unwrap(),
@@ -72,8 +72,8 @@ impl Scene {
 
 #[derive(Debug, Deserialize)]
 struct SceneConfig {
-    polytopes_folder: String,
-    polytope_path: String,
+    polytopes_folder: PathBuf,
+    polytope_path: PathBuf,
 
     min_dimension: usize,
 
