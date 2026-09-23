@@ -22,7 +22,6 @@ mod scene;
 
 const DONE_SOUND_BYTES: &[u8] = include_bytes!(".././done.wav");
 
-#[allow(clippy::cast_precision_loss)]
 #[macroquad::main("nD Renderer")]
 async fn main() {
     // Create folders if they do not exist already

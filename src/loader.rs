@@ -75,7 +75,6 @@ fn get_vertices_from_element(
     }
 }
 
-#[allow(clippy::cast_precision_loss)]
 pub fn load_polytope(scene: &mut Scene, random: bool) {
     if random {
         set_random_polytope(scene);
