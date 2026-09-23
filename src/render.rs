@@ -1,9 +1,9 @@
 use macroquad::prelude::*;
 use nalgebra::{DMatrix, DVector};
 
-use crate::color::*;
-use crate::math::*;
-use crate::scene::*;
+use crate::color::{color_from_wv, fade_from_depth};
+use crate::math::{distance_from_nvolume, project_vertex};
+use crate::scene::Scene;
 
 pub fn draw_triangle_color(
     v1: Vec2,
@@ -16,9 +16,9 @@ pub fn draw_triangle_color(
     let context = unsafe { get_internal_gl() };
 
     let vertices = [
-        Vertex::new(v1.x, v1.y, 0., 0., 0., color1),
-        Vertex::new(v2.x, v2.y, 0., 0., 0., color2),
-        Vertex::new(v3.x, v3.y, 0., 0., 0., color3),
+        Vertex::new(v1.x, v1.y, 0.0, 0.0, 0.0, color1),
+        Vertex::new(v2.x, v2.y, 0.0, 0.0, 0.0, color2),
+        Vertex::new(v3.x, v3.y, 0.0, 0.0, 0.0, color3),
     ];
 
     let indices: [u16; 3] = [0, 1, 2];
@@ -61,19 +61,48 @@ pub fn draw_variable_width_line(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FadePlanes {
+    /// Fade start
+    pub near: f32,
+    /// Fade end
+    pub far: f32,
+    /// Extra-dimensional fade (how far you can see into what's perpendicular to XYZ)
+    pub w_scale: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EdgeSettings {
+    /// How wide the drawn edges are
+    pub edge_width: f32,
+    /// How much subdivisions the edges have
+    pub subdivisions: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CameraPerspective {
+    pub zoom: f32,
+    /// Multiplier of scale, helps with perspective
+    pub render_size: f32,
+}
+
+#[allow(clippy::cast_precision_loss)]
 pub fn render(
     scene: &Scene,
-    subdivisions: i32,
     shape_matrix: &DMatrix<f32>,
     shape_position: &DVector<f32>,
-    edge_width: f32,
-    near: f32,
-    far: f32,
-    zoom: f32,
-    w_scale: f32,
-    render_size: f32,
-    screen_size: &Vec2,
+    edge_settings: EdgeSettings,
+    fade_planes: FadePlanes,
+    camera: CameraPerspective,
+    screen_size: Vec2,
 ) {
+    let EdgeSettings {
+        edge_width,
+        subdivisions,
+    } = edge_settings;
+    let FadePlanes { near, far, w_scale } = fade_planes;
+    let CameraPerspective { zoom, render_size } = camera;
+
     clear_background(BLACK);
 
     let mut local_space_vertices: Vec<DVector<f32>> = Vec::new();
@@ -92,8 +121,8 @@ pub fn render(
         let vertex_b = &local_space_vertices[scene.edges[i + 1]];
 
         for s in 0..subdivisions {
-            let vertex_1 = vertex_a.lerp(&vertex_b, (s as f32) / (subdivisions as f32));
-            let vertex_2 = vertex_a.lerp(&vertex_b, ((s + 1) as f32) / (subdivisions as f32));
+            let vertex_1 = vertex_a.lerp(vertex_b, f32::from(s) / f32::from(subdivisions));
+            let vertex_2 = vertex_a.lerp(vertex_b, (f32::from(s) + 1.0) / f32::from(subdivisions));
 
             let radius_1 = (screen_size.y * edge_width) / vertex_1[2];
             let radius_2 = (screen_size.y * edge_width) / vertex_2[2];
@@ -107,8 +136,8 @@ pub fn render(
             color_2.a *= 1.0 - (distance_from_nvolume(&vertex_2, 5) * w_scale).clamp(0.0, 1.0);
 
             draw_variable_width_line(
-                project_vertex(&vertex_1, render_size, screen_size.clone()),
-                project_vertex(&vertex_2, render_size, screen_size.clone()),
+                project_vertex(&vertex_1, render_size, screen_size),
+                project_vertex(&vertex_2, render_size, screen_size),
                 radius_1 * render_size,
                 radius_2 * render_size,
                 color_1,

@@ -1,21 +1,18 @@
-use macroquad::audio::load_sound_from_bytes;
-use macroquad::audio::play_sound_once;
+#![allow(clippy::cast_precision_loss)]
+
+use macroquad::audio::{load_sound_from_bytes, play_sound_once};
 use macroquad::miniquad::window::set_window_size;
 use macroquad::prelude::*;
 use macroquad::rand::srand;
-use na::Vector2;
-use nalgebra::VecStorage;
-use nalgebra::{self as na, DMatrix, DVector};
+use nalgebra::{DMatrix, DVector, VecStorage, Vector2};
 use std::env;
 use std::f32::consts::TAU;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
-use std::vec;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::loader::*;
-use crate::math::*;
-use crate::render::*;
-use crate::scene::*;
+use crate::loader::load_polytope;
+use crate::math::rotate_matrix;
+use crate::render::{render, CameraPerspective, EdgeSettings, FadePlanes};
+use crate::scene::Scene;
 
 mod color;
 mod loader;
@@ -23,10 +20,10 @@ mod math;
 mod render;
 mod scene;
 
+const DONE_SOUND_BYTES: &[u8] = include_bytes!(".././done.wav");
+
 #[macroquad::main("nD Renderer")]
 async fn main() {
-    let args: Vec<String> = env::args().collect();
-
     // Create folders if they do not exist already
     std::fs::create_dir_all("./images").unwrap();
     std::fs::create_dir_all("./polytopes").unwrap();
@@ -38,9 +35,7 @@ async fn main() {
             .as_secs(),
     ); // Change macroquads random seed to prevent choosing the same sequence of polytopes
 
-    const DONE_SOUND_BYTES: &[u8] = include_bytes!(".././done.wav");
-
-    let mut scene = Scene::setup(&args);
+    let mut scene = Scene::setup(env::args());
 
     load_polytope(&mut scene, false);
 
@@ -56,18 +51,24 @@ async fn main() {
         VecStorage<f32, nalgebra::Dyn, nalgebra::Dyn>,
     > = DMatrix::identity(scene.dimension, scene.dimension);
 
-    let mut render_size = 0.5;
-    let mut edge_width = 1.0 / 84.0;
-    let mut zoom = 2.0;
+    let mut fade_planes = FadePlanes {
+        near: -1.0,
+        far: 0.5,
+        w_scale: 0.5,
+    };
 
-    let mut w_scale: f32 = 0.5;
-    let mut near = -1.0;
-    let mut far = 0.5;
+    let mut edge_settings = EdgeSettings {
+        edge_width: 1.0 / 84.0,
+        subdivisions: 1,
+    };
+
+    let mut camera = CameraPerspective {
+        render_size: 0.5,
+        zoom: 2.0,
+    };
 
     let mut previous_mouse_pos = Vector2::new(0.0, 0.0);
     let mut mouse_lock: bool = false;
-
-    let mut subdivisions = 1;
 
     let facet_expansion_key_speed = f32::exp2(0.25); // 2 ^ 1/4
 
@@ -93,30 +94,6 @@ async fn main() {
             mouse_lock = !mouse_lock;
             set_cursor_grab(mouse_lock);
             show_mouse(!mouse_lock);
-        }
-
-        fn mouse_control(
-            previous_mouse_pos: Vector2<f32>,
-            dimension: usize,
-            shape_matrix: DMatrix<f32>,
-            axis: usize,
-            sensitivity: f32,
-        ) -> DMatrix<f32> {
-            if axis < dimension {
-                return rotate_matrix(
-                    1,
-                    axis,
-                    (mouse_position().1 - previous_mouse_pos.y) * -sensitivity,
-                    dimension,
-                ) * rotate_matrix(
-                    0,
-                    axis,
-                    (mouse_position().0 - previous_mouse_pos.x) * sensitivity,
-                    dimension,
-                ) * shape_matrix;
-            } else {
-                return shape_matrix;
-            }
         }
 
         if mouse_lock
@@ -208,48 +185,48 @@ async fn main() {
         let scroll = mouse_wheel().1;
         if scroll < 0.0 {
             if is_key_down(KeyCode::LeftControl) {
-                zoom *= 13.0 / 12.0;
-                render_size *= 13.0 / 12.0;
+                camera.zoom *= 13.0 / 12.0;
+                camera.render_size *= 13.0 / 12.0;
             } else if is_key_down(KeyCode::LeftShift) {
-                edge_width *= 12.0 / 13.0;
+                edge_settings.edge_width *= 12.0 / 13.0;
             } else {
-                render_size *= 12.0 / 13.0;
+                camera.render_size *= 12.0 / 13.0;
             }
         } else if scroll > 0.0 {
             if is_key_down(KeyCode::LeftControl) {
-                zoom *= 12.0 / 13.0;
-                render_size *= 12.0 / 13.0;
+                camera.zoom *= 12.0 / 13.0;
+                camera.render_size *= 12.0 / 13.0;
             } else if is_key_down(KeyCode::LeftShift) {
-                edge_width *= 13.0 / 12.0;
+                edge_settings.edge_width *= 13.0 / 12.0;
             } else {
-                render_size *= 13.0 / 12.0;
+                camera.render_size *= 13.0 / 12.0;
             }
         }
-        shape_position[2] = zoom;
+        shape_position[2] = camera.zoom;
 
         if is_key_down(KeyCode::Q) {
-            near += get_frame_time();
+            fade_planes.near += get_frame_time();
         }
         if is_key_down(KeyCode::A) {
-            near -= get_frame_time();
+            fade_planes.near -= get_frame_time();
         }
         if is_key_down(KeyCode::W) {
-            far += get_frame_time();
+            fade_planes.far += get_frame_time();
         }
         if is_key_down(KeyCode::S) {
-            far -= get_frame_time();
+            fade_planes.far -= get_frame_time();
         }
         if is_key_down(KeyCode::E) {
-            w_scale *= 1.0 - get_frame_time();
+            fade_planes.w_scale *= 1.0 - get_frame_time();
         }
         if is_key_down(KeyCode::D) {
-            w_scale *= 1.0 + get_frame_time();
+            fade_planes.w_scale *= 1.0 + get_frame_time();
         }
         if is_key_pressed(KeyCode::R) {
-            subdivisions += 1;
+            edge_settings.subdivisions = edge_settings.subdivisions.saturating_add(1);
         }
         if is_key_pressed(KeyCode::F) {
-            subdivisions = (subdivisions - 1).max(1);
+            edge_settings.subdivisions = edge_settings.subdivisions.saturating_sub(1);
         }
         if is_key_pressed(KeyCode::T) {
             // increases facet_expansion
@@ -260,7 +237,8 @@ async fn main() {
         if is_key_pressed(KeyCode::G) {
             // decreases facet_expansion
             scene.clear_polytope();
-            scene.facet_expansion = 1.0 - (1.0 - scene.facet_expansion) * facet_expansion_key_speed;
+            scene.facet_expansion =
+                (1.0 - scene.facet_expansion).mul_add(-facet_expansion_key_speed, 1.0);
             if scene.facet_expansion < 1.0 - 1.0 / facet_expansion_key_speed {
                 scene.facet_expansion = 0.0;
             }
@@ -283,7 +261,7 @@ async fn main() {
             load_polytope(&mut scene, false);
         }
         if is_key_pressed(KeyCode::Key0) {
-            scene = Scene::setup(&args);
+            scene = Scene::setup(env::args());
             load_polytope(&mut scene, false);
             if scene.dimension != shape_position.nrows() {
                 shape_matrix = DMatrix::identity(scene.dimension, scene.dimension);
@@ -319,16 +297,12 @@ async fn main() {
             // render the scene
             render(
                 &scene,
-                subdivisions,
                 &(&shape_matrix * &rotational_offset),
                 &shape_position,
-                edge_width,
-                near,
-                far,
-                zoom,
-                w_scale,
-                render_size,
-                &vec2(scene.resolution_vector.x, scene.resolution_vector.y),
+                edge_settings,
+                fade_planes,
+                camera,
+                Vec2::new(scene.resolution_vector.x, scene.resolution_vector.y),
             );
 
             // go back to the screen
@@ -338,16 +312,12 @@ async fn main() {
         // render the scene to the screen
         render(
             &scene,
-            subdivisions,
             &(&shape_matrix * &rotational_offset),
             &shape_position,
-            edge_width,
-            near,
-            far,
-            zoom,
-            w_scale,
-            render_size,
-            &vec2(screen_width(), screen_height()),
+            edge_settings,
+            fade_planes,
+            camera,
+            Vec2::new(screen_width(), screen_height()),
         );
 
         if image_index > -1 {
@@ -376,7 +346,7 @@ async fn main() {
                 // Force saved image to have no transparency
                 pix[3] = 255;
             }
-            img.export_png(&format!("./images/{:03}.png", image_index));
+            img.export_png(&format!("./images/{image_index:03}.png"));
 
             image_index += 1;
         }
@@ -420,12 +390,14 @@ async fn main() {
             // Start
             image_index = -1;
 
-            if !std::path::Path::new("./rotations.txt").exists() {
-                panic!("no rotations.txt file!!!!");
-            }
-            if !std::path::Path::new("./motion.txt").exists() {
-                panic!("no motion.txt file!!!!");
-            }
+            assert!(
+                std::path::Path::new("./rotations.txt").exists(),
+                "no rotations.txt file!!!!"
+            );
+            assert!(
+                std::path::Path::new("./motion.txt").exists(),
+                "no motion.txt file!!!!"
+            );
 
             let rotation_file_contents = std::fs::read_to_string("./rotations.txt").unwrap();
 
@@ -439,7 +411,7 @@ async fn main() {
                 let mut value_count = 0;
 
                 // go through the line of text to find the numbers
-                for number_string in line.split(" ") {
+                for number_string in line.split(' ') {
                     let number: usize = number_string.parse().unwrap();
 
                     rotation_file_values.push(number);
@@ -468,10 +440,9 @@ async fn main() {
             starting_position.clear();
             motion.clear();
 
-            let mut index = 0;
-            for line in motion_file_contents.lines() {
+            for (index, line) in motion_file_contents.lines().enumerate() {
                 // go through the line of text to find the numbers
-                for number_string in line.split(" ") {
+                for number_string in line.split(' ') {
                     let number: f32 = number_string.parse().unwrap();
 
                     if index == 0 {
@@ -480,8 +451,6 @@ async fn main() {
                         motion.push(number);
                     }
                 }
-
-                index += 1;
             }
 
             for i in 0..starting_position.len() {
@@ -491,6 +460,30 @@ async fn main() {
             }
         }
 
-        next_frame().await
+        next_frame().await;
+    }
+}
+
+fn mouse_control(
+    previous_mouse_pos: Vector2<f32>,
+    dimension: usize,
+    shape_matrix: DMatrix<f32>,
+    axis: usize,
+    sensitivity: f32,
+) -> DMatrix<f32> {
+    if axis < dimension {
+        rotate_matrix(
+            1,
+            axis,
+            (mouse_position().1 - previous_mouse_pos.y) * -sensitivity,
+            dimension,
+        ) * rotate_matrix(
+            0,
+            axis,
+            (mouse_position().0 - previous_mouse_pos.x) * sensitivity,
+            dimension,
+        ) * shape_matrix
+    } else {
+        shape_matrix
     }
 }

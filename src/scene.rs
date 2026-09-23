@@ -1,4 +1,4 @@
-use std::{fs, io};
+use std::{fs, io, path::PathBuf};
 
 use macroquad::color::Color;
 use nalgebra::{DVector, Vector2};
@@ -6,8 +6,8 @@ use serde::Deserialize;
 
 #[derive(Debug)]
 pub struct Scene {
-    pub polytopes_folder: String,
-    pub polytope_path: String,
+    pub polytopes_folder: PathBuf,
+    pub polytope_path: PathBuf,
     pub resolution: u32,
     pub frame_count: i32,
     pub facet_expansion: f32,
@@ -21,8 +21,8 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn setup(args: &[String]) -> Self {
-        let given_polytope_path = args.get(1).cloned();
+    pub fn setup(mut args: impl Iterator<Item = String>) -> Self {
+        let given_polytope_path: Option<PathBuf> = args.nth(1).map(Into::into);
 
         // if you can read setup.toml
         if let Ok(bytes) = fs::read("./setup.toml") {
@@ -30,7 +30,7 @@ impl Scene {
                 toml::from_slice(&bytes).expect("error reading setup.toml");
 
             // convert SceneConfig -> Scene and return
-            let mut scene: Scene = scene_config.into();
+            let mut scene: Self = scene_config.into();
 
             if let Some(polytope_path) = given_polytope_path {
                 scene.polytope_path = polytope_path;
@@ -43,19 +43,19 @@ impl Scene {
             Ok(v) => v,
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => panic!("no setup.txt file!!!!"),
-                _ => panic!("could not read setup.txt: {}", err),
+                _ => panic!("could not read setup.txt: {err}"),
             },
         };
         let lines: Vec<&str> = setup_file_contents.lines().collect();
 
-        Scene {
-            polytopes_folder: lines[0].to_string(),
-            polytope_path: given_polytope_path.unwrap_or_else(|| lines[1].to_string()),
+        Self {
+            polytopes_folder: lines[0].into(),
+            polytope_path: given_polytope_path.unwrap_or_else(|| lines[1].into()),
             resolution: lines[2].parse().unwrap(),
             frame_count: lines[3].parse().unwrap(),
             min_dimension: lines[4].parse().unwrap(),
             facet_expansion: lines[5].parse().unwrap(),
-            facet_expansion_rank: lines[6].parse::<isize>().unwrap() as usize, // converts negative values to super high (integer underflow) ones. necessary for relative to rank values
+            facet_expansion_rank: lines[6].parse::<isize>().unwrap().cast_unsigned(), // converts negative values to super high (integer underflow) ones. necessary for relative to rank values
             dimension: 0,
             vertices: vec![],
             edges: vec![],
@@ -72,8 +72,8 @@ impl Scene {
 
 #[derive(Debug, Deserialize)]
 struct SceneConfig {
-    polytopes_folder: String,
-    polytope_path: String,
+    polytopes_folder: PathBuf,
+    polytope_path: PathBuf,
 
     min_dimension: usize,
 
@@ -84,15 +84,16 @@ struct SceneConfig {
 }
 
 impl From<SceneConfig> for Scene {
+    #[allow(clippy::cast_precision_loss)]
     fn from(value: SceneConfig) -> Self {
-        Scene {
+        Self {
             polytopes_folder: value.polytopes_folder,
             polytope_path: value.polytope_path,
             resolution: value.animation.resolution,
             frame_count: value.animation.frame_count,
             min_dimension: value.min_dimension,
             facet_expansion: value.facet_expansion.facet_expansion,
-            facet_expansion_rank: value.facet_expansion.facet_expansion_rank as usize, // converts negative values to super high (integer underflow) ones. necessary for relative to rank values
+            facet_expansion_rank: value.facet_expansion.facet_expansion_rank.cast_unsigned(), // converts negative values to super high (integer underflow) ones. necessary for relative to rank values
             dimension: 0,
             vertices: vec![],
             edges: vec![],

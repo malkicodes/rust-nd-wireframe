@@ -1,8 +1,13 @@
-use std::path::PathBuf;
+#![allow(clippy::cast_precision_loss, clippy::too_many_lines)]
 
-use macroquad::{color::*, rand::ChooseRandom};
+use std::{ffi::OsStr, path::PathBuf};
+
+use macroquad::{
+    color::{Color, MAGENTA, WHITE},
+    rand::ChooseRandom,
+};
 use nalgebra::DVector;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 use crate::Scene;
 
@@ -14,8 +19,7 @@ fn get_vertices_from_element(
     index: usize,
 ) {
     // loop through the facet
-    let mut i = 0;
-    for sub_element in &polytope_data[rank - 2][index] {
+    for (i, sub_element) in polytope_data[rank - 2][index].iter().enumerate() {
         if rank == 2 {
             // Faces, add vertices
             element_vertices.push(*sub_element);
@@ -40,9 +44,9 @@ fn get_vertices_from_element(
             );
 
             // Merge faces and other elements correctly
-            for vertex in sub_vertices.iter() {
+            for vertex in &sub_vertices {
                 if !element_vertices.contains(vertex) {
-                    element_vertices.push(vertex.clone());
+                    element_vertices.push(*vertex);
                 }
             }
             for edge in (0..sub_edges.len()).step_by(2) {
@@ -68,56 +72,76 @@ fn get_vertices_from_element(
                 }
             }
         }
-
-        i += 1;
     }
 }
 
-pub fn load_polytope(scene: &mut Scene, rand: bool) {
-    if rand {
-        let files: Vec<PathBuf> = WalkDir::new(scene.polytopes_folder.as_str())
-            .into_iter()
-            .filter_map(|entry| entry.ok()) // Ignore unreadable files/directories
-            .filter(|entry| entry.file_type().is_file()) // Filter out directories
-            .map(|entry| entry.into_path()) // Convert WalkDir Entry to PathBuf
-            .collect();
-
-        let file = files
-            .choose()
-            .expect("File cannot be found or doesnt exist!!!!");
-
-        scene.polytope_path = file.display().to_string();
-
-        let mut polytope_name = scene.polytope_path.clone();
-        polytope_name = polytope_name.replace("\\", "/");
-        let path_chunks = polytope_name.split("/");
-        polytope_name = path_chunks
-            .last()
-            .expect("failed to get polytope name")
-            .to_string();
-
-        println!("Chose {}", polytope_name);
+pub fn load_polytope(scene: &mut Scene, random: bool) {
+    if random {
+        set_random_polytope(scene);
     }
 
-    let contents: String = std::fs::read_to_string(scene.polytope_path.as_str())
+    let contents: String = std::fs::read_to_string(&scene.polytope_path)
         .expect("File cannot be found or doesnt exist!!!!");
 
-    let mut state: u8 = 0;
+    let LoadPolytopeDataOutput {
+        polytope_vertices,
+        polytope_data,
+        rank,
+    } = load_polytope_data(scene, &contents);
 
-    let mut rank: u8 = 0;
+    // we now have the polytope_data.
+    // polytope_data stores the faces, then the cells, tera, etc. Its length is 2 less than the rank.
+    if scene.facet_expansion > 0.0 {
+        expand_facets(scene, &polytope_vertices, &polytope_data, rank);
+    } else {
+        scene.vertices = polytope_vertices;
+    }
+}
 
-    let mut full_lines_seen = 0;
+fn set_random_polytope(scene: &mut Scene) {
+    let files: Vec<PathBuf> = WalkDir::new(&scene.polytopes_folder)
+        .into_iter()
+        .filter_map(Result::ok) // Ignore unreadable files/directories
+        .filter(|entry| entry.file_type().is_file()) // Filter out directories
+        .map(DirEntry::into_path)
+        .filter(|path| path.as_path() != scene.polytope_path.as_path()) // Convert WalkDir Entry to PathBuf
+        .collect();
 
+    let file = files
+        .choose()
+        .expect("File cannot be found or doesnt exist!!!!");
+
+    scene.polytope_path.clone_from(file); // equivalent to scene.polytope.path = file.clone() but supposedly faster
+
+    let polytope_name = scene
+        .polytope_path
+        .file_name()
+        .unwrap_or_else(|| OsStr::new("error getting file name"))
+        .to_string_lossy();
+
+    println!("Chose {polytope_name}");
+}
+
+struct LoadPolytopeDataOutput {
+    polytope_vertices: Vec<DVector<f32>>,
+    polytope_data: Vec<Vec<Vec<usize>>>,
+    rank: u8,
+}
+
+fn load_polytope_data(scene: &mut Scene, contents: &str) -> LoadPolytopeDataOutput {
     // vertices
-    let mut polytope_vertices: Vec<DVector<f32>> = vec![];
+    let mut polytope_vertices: Vec<DVector<f32>> = Vec::new();
     // rank, element, indices referencing previous rank
-    let mut polytope_data: Vec<Vec<Vec<usize>>> = vec![];
+    let mut polytope_data: Vec<Vec<Vec<usize>>> = Vec::new();
 
-    for line in contents.lines() {
-        if line.starts_with("#") {
-            continue;
-        }
+    let mut state: u8 = 0;
+    let mut rank: u8 = 0;
+    let mut full_lines_seen: u32 = 0;
 
+    for line in contents
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+    {
         if line.is_empty() {
             if state == 1 {
                 // If done reading rank, start reading vertices
@@ -132,14 +156,14 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
                 // If done reading edges (faces), continue or stop depending on facet_expansion
                 if scene.facet_expansion == 0.0 {
                     break;
-                } else {
-                    state += 1;
-                    if state > rank {
-                        break;
-                    } else {
-                        polytope_data.push(vec![]);
-                    }
                 }
+
+                state += 1;
+                if state > rank {
+                    break;
+                }
+
+                polytope_data.push(vec![]);
             }
 
             continue;
@@ -147,14 +171,17 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
 
         if line.ends_with("OFF") {
             if line == "OFF" {
-                scene.dimension = 3; // some dumbasses think that not having a number for 3D is okay, well, it's NOT,
-                                     // it means I have to take time out of MY day to add an edge case for it every single time I
-                                     // make an OFF importer. AGH.
+                /*
+                some dumbasses think that not having a number for 3D is okay, well, it's NOT,
+                it means I have to take time out of MY day to add an edge case for it every single time I
+                make an OFF importer. AGH.
+                */
+                scene.dimension = 3;
             } else {
-                scene.dimension = line[..line.len() - 3].parse().unwrap();
+                scene.dimension = line.strip_suffix("OFF").unwrap().parse().unwrap();
             }
 
-            rank = scene.dimension as u8;
+            rank = u8::try_from(scene.dimension).unwrap();
 
             if scene.dimension < scene.min_dimension {
                 scene.dimension = scene.min_dimension;
@@ -187,7 +214,7 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
         if state == 2 {
             let mut vertex: Vec<f32> = vec![];
 
-            for coordinate in line.split(" ") {
+            for coordinate in line.split(' ') {
                 if !coordinate.is_empty() {
                     vertex.push(coordinate.parse().unwrap());
                 }
@@ -206,16 +233,13 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
             let mut face: Vec<usize> = vec![];
 
             // go through the line of text to find the indices
-            let mut index = 0;
-            for number_string in line.split(" ") {
+            for (i, number_string) in line.split(' ').enumerate() {
                 let number: usize = number_string.parse().unwrap();
 
                 // the first one is the size of the face. who needs that? I have .len() and I'm not afraid to use it.
-                if index != 0 {
+                if i != 0 {
                     face.push(number);
                 }
-
-                index += 1;
             }
 
             polytope_data[0].push(face.clone());
@@ -255,166 +279,169 @@ pub fn load_polytope(scene: &mut Scene, rand: bool) {
             let mut element: Vec<usize> = vec![];
 
             // go through the line of text to find the indices
-            let mut index = 0;
-            for number_string in line.split(" ") {
+            for (index, number_string) in line.split(' ').enumerate() {
                 let number: usize = number_string.parse().unwrap();
 
                 // the first one is the size of the element. who needs that? I have .len() and I'm not afraid to use it.
                 if index != 0 {
                     element.push(number);
                 }
-
-                index += 1;
             }
 
             polytope_data[(state - 3) as usize].push(element);
         }
     }
 
-    // we now have the polytope_data.
-    // polytope_data stores the faces, then the cells, tera, etc. Its length is 2 less than the rank.
-    if scene.facet_expansion > 0.0 {
-        // okay, we need to append vertices of every facet, scaled inward towards the average, to the polytope.
-        for facet in 0..polytope_data[scene.facet_expansion_rank - 2].len() {
-            let mut facet_vertices: Vec<usize> = vec![];
-            let mut facet_edges: Vec<usize> = vec![];
+    LoadPolytopeDataOutput {
+        polytope_vertices,
+        polytope_data,
+        rank,
+    }
+}
 
-            get_vertices_from_element(
-                &polytope_data,
-                &mut facet_vertices,
-                &mut facet_edges,
-                scene.facet_expansion_rank as usize,
-                facet,
+fn expand_facets(
+    scene: &mut Scene,
+    polytope_vertices: &[DVector<f32>],
+    polytope_data: &Vec<Vec<Vec<usize>>>,
+    rank: u8,
+) {
+    // okay, we need to append vertices of every facet, scaled inward towards the average, to the polytope.
+    for facet in 0..polytope_data[scene.facet_expansion_rank - 2].len() {
+        let mut facet_vertices: Vec<usize> = vec![];
+        let mut facet_edges: Vec<usize> = vec![];
+
+        get_vertices_from_element(
+            polytope_data,
+            &mut facet_vertices,
+            &mut facet_edges,
+            scene.facet_expansion_rank,
+            facet,
+        );
+
+        // once that is done, loop over all the facet_vertices to determine the center.
+        let mut facet_center: DVector<f32> = DVector::zeros(scene.dimension);
+        for vertex in &facet_vertices {
+            facet_center += &polytope_vertices[*vertex];
+        }
+        facet_center /= facet_vertices.len() as f32;
+
+        // vertices is the vertices of the mesh
+        // polytope_vertices is the vertices of the polytope
+        // fucking dumbass (for context, this used to say polytope_vertices.len(), and I struggled to find why it wasn't working)
+        let past_vertex_count = scene.vertices.len();
+
+        // loop over them again, subtracting each one by the center, multiplying by facet_expansion, and then adding the center
+        for vertex in &facet_vertices {
+            scene.vertices.push(
+                ((&polytope_vertices[*vertex] - &facet_center) * scene.facet_expansion)
+                    + &facet_center,
             );
+        }
 
-            // once that is done, loop over all the facet_vertices to determine the center.
-            let mut facet_center: DVector<f32> = DVector::zeros(scene.dimension);
-            for vertex in facet_vertices.iter() {
-                facet_center += &polytope_vertices[*vertex];
-            }
-            facet_center /= facet_vertices.len() as f32;
+        for edge in &facet_edges {
+            // These variables are very poorly named, so I will explain
+            // past_vertex_count is the number of vertices before a facet, so that's our starting point
+            // we have edges as references to vertex IDs in the global polytope
+            // but we want the edges as reference to vertex IDs in the facet
+            // luckily we can just search the facet_vertices array for these IDs and then it'll work
 
-            // vertices is the vertices of the mesh
-            // polytope_vertices is the vertices of the polytope
-            // fucking dumbass (for context, this used to say polytope_vertices.len(), and I struggled to find why it wasn't working)
-            let past_vertex_count = scene.vertices.len();
+            // edge is the global polytope vertex ID to the first or second half of an edge
+            // facet_vertices contains the vertex IDs of the facet in relation to the global polytope
 
-            // loop over them again, subtracting each one by the center, multiplying by facet_expansion, and then adding the center
-            for vertex in facet_vertices.iter() {
-                scene.vertices.push(
-                    ((&polytope_vertices[*vertex] - &facet_center) * scene.facet_expansion)
-                        + &facet_center,
-                );
-            }
+            scene
+                .edges
+                .push(past_vertex_count + facet_vertices.iter().position(|x| *x == *edge).unwrap());
+        }
 
-            for edge in facet_edges.iter() {
-                // These variables are very poorly named, so I will explain
-                // past_vertex_count is the number of vertices before a facet, so that's our starting point
-                // we have edges as references to vertex IDs in the global polytope
-                // but we want the edges as reference to vertex IDs in the facet
-                // luckily we can just search the facet_vertices array for these IDs and then it'll work
-
-                // edge is the global polytope vertex ID to the first or second half of an edge
-                // facet_vertices contains the vertex IDs of the facet in relation to the global polytope
-
-                scene.edges.push(
-                    past_vertex_count + facet_vertices.iter().position(|x| *x == *edge).unwrap(),
-                );
-            }
-
-            for _i in 0..facet_edges.len() / 2 {
-                if rank == 3 {
-                    match facet_vertices.len() {
-                        3 => {
-                            // A2, red
-                            scene.edge_colors.push(Color {
-                                r: 213.0 / 255.0,
-                                g: 56.0 / 255.0,
-                                b: 56.0 / 255.0,
-                                a: 1.0,
-                            });
-                        }
-                        6 => {
-                            // G2/2, light red
-                            scene.edge_colors.push(Color {
-                                r: 208.0 / 255.0,
-                                g: 100.0 / 255.0,
-                                b: 100.0 / 255.0,
-                                a: 1.0,
-                            });
-                        }
-                        4 => {
-                            // lies roughly on the axes
-                            if (f32::abs(facet_center[0]) < 0.01
-                                && f32::abs(facet_center[1]) < 0.01)
-                                || (f32::abs(facet_center[0]) < 0.01
-                                    && f32::abs(facet_center[2]) < 0.01)
-                                || (f32::abs(facet_center[2]) < 0.01
-                                    && f32::abs(facet_center[1]) < 0.01)
-                            {
-                                // exclude H3
-                                if polytope_data[0].len() < 30 {
-                                    // B2, blue
-                                    scene.edge_colors.push(Color {
-                                        r: 43.0 / 255.0,
-                                        g: 38.0 / 255.0,
-                                        b: 135.0 / 255.0,
-                                        a: 1.0,
-                                    });
-                                    continue;
-                                }
-                            }
-
-                            // K2, yellow
-                            scene.edge_colors.push(Color {
-                                r: 229.0 / 255.0,
-                                g: 188.0 / 255.0,
-                                b: 38.0 / 255.0,
-                                a: 1.0,
-                            });
-                        }
-                        8 => {
-                            // I2(8)/2, light blue
-                            scene.edge_colors.push(Color {
-                                r: 87.0 / 255.0,
-                                g: 83.0 / 255.0,
-                                b: 153.0 / 255.0,
-                                a: 1.0,
-                            });
-                        }
-                        5 => {
-                            // H2, purple
-                            scene.edge_colors.push(Color {
-                                r: 139.0 / 255.0,
-                                g: 58.0 / 255.0,
-                                b: 177.0 / 255.0,
-                                a: 1.0,
-                            });
-                            // green
-                            // scene.edge_colors.push(Color { r: 66.0/255.0, g: 210.0/255.0, b: 58.0/255.0, a: 1.0 });
-                        }
-                        10 => {
-                            // I2(10)/2, light purple
-                            scene.edge_colors.push(Color {
-                                r: 147.0 / 255.0,
-                                g: 98.0 / 255.0,
-                                b: 170.0 / 255.0,
-                                a: 1.0,
-                            });
-                            // light green
-                            // scene.edge_colors.push(Color { r: 86.0/255.0, g: 220.0/255.0, b: 129.0/255.0, a: 1.0 });
-                        }
-                        _ => {
-                            // ???
-                            scene.edge_colors.push(MAGENTA);
-                        }
+        for _i in 0..facet_edges.len() / 2 {
+            if rank == 3 {
+                match facet_vertices.len() {
+                    3 => {
+                        // A2, red
+                        scene.edge_colors.push(Color {
+                            r: 213.0 / 255.0,
+                            g: 56.0 / 255.0,
+                            b: 56.0 / 255.0,
+                            a: 1.0,
+                        });
                     }
-                } else {
-                    scene.edge_colors.push(WHITE);
+                    6 => {
+                        // G2/2, light red
+                        scene.edge_colors.push(Color {
+                            r: 208.0 / 255.0,
+                            g: 100.0 / 255.0,
+                            b: 100.0 / 255.0,
+                            a: 1.0,
+                        });
+                    }
+                    4 => {
+                        // lies roughly on the axes
+                        if (f32::abs(facet_center[0]) < 0.01 && f32::abs(facet_center[1]) < 0.01)
+                            || (f32::abs(facet_center[0]) < 0.01
+                                && f32::abs(facet_center[2]) < 0.01)
+                            || (f32::abs(facet_center[2]) < 0.01
+                                && f32::abs(facet_center[1]) < 0.01)
+                        {
+                            // exclude H3
+                            if polytope_data[0].len() < 30 {
+                                // B2, blue
+                                scene.edge_colors.push(Color {
+                                    r: 43.0 / 255.0,
+                                    g: 38.0 / 255.0,
+                                    b: 135.0 / 255.0,
+                                    a: 1.0,
+                                });
+                                continue;
+                            }
+                        }
+
+                        // K2, yellow
+                        scene.edge_colors.push(Color {
+                            r: 229.0 / 255.0,
+                            g: 188.0 / 255.0,
+                            b: 38.0 / 255.0,
+                            a: 1.0,
+                        });
+                    }
+                    8 => {
+                        // I2(8)/2, light blue
+                        scene.edge_colors.push(Color {
+                            r: 87.0 / 255.0,
+                            g: 83.0 / 255.0,
+                            b: 153.0 / 255.0,
+                            a: 1.0,
+                        });
+                    }
+                    5 => {
+                        // H2, purple
+                        scene.edge_colors.push(Color {
+                            r: 139.0 / 255.0,
+                            g: 58.0 / 255.0,
+                            b: 177.0 / 255.0,
+                            a: 1.0,
+                        });
+                        // green
+                        // scene.edge_colors.push(Color { r: 66.0/255.0, g: 210.0/255.0, b: 58.0/255.0, a: 1.0 });
+                    }
+                    10 => {
+                        // I2(10)/2, light purple
+                        scene.edge_colors.push(Color {
+                            r: 147.0 / 255.0,
+                            g: 98.0 / 255.0,
+                            b: 170.0 / 255.0,
+                            a: 1.0,
+                        });
+                        // light green
+                        // scene.edge_colors.push(Color { r: 86.0/255.0, g: 220.0/255.0, b: 129.0/255.0, a: 1.0 });
+                    }
+                    _ => {
+                        // ???
+                        scene.edge_colors.push(MAGENTA);
+                    }
                 }
+            } else {
+                scene.edge_colors.push(WHITE);
             }
         }
-    } else {
-        scene.vertices = polytope_vertices.clone();
     }
 }
