@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::loader::load_polytope;
 use crate::math::rotate_matrix;
-use crate::render::render;
+use crate::render::{render, CameraPerspective, EdgeSettings, FadePlanes};
 use crate::scene::Scene;
 
 mod color;
@@ -52,18 +52,24 @@ async fn main() {
         VecStorage<f32, nalgebra::Dyn, nalgebra::Dyn>,
     > = DMatrix::identity(scene.dimension, scene.dimension);
 
-    let mut render_size = 0.5;
-    let mut edge_width = 1.0 / 84.0;
-    let mut zoom = 2.0;
+    let mut fade_planes = FadePlanes {
+        near: -1.0,
+        far: 0.5,
+        w_scale: 0.5,
+    };
 
-    let mut w_scale: f32 = 0.5;
-    let mut near = -1.0;
-    let mut far = 0.5;
+    let mut edge_settings = EdgeSettings {
+        edge_width: 1.0 / 84.0,
+        subdivisions: 1,
+    };
+
+    let mut camera = CameraPerspective {
+        render_size: 0.5,
+        zoom: 2.0,
+    };
 
     let mut previous_mouse_pos = Vector2::new(0.0, 0.0);
     let mut mouse_lock: bool = false;
-
-    let mut subdivisions = 1;
 
     let facet_expansion_key_speed = f32::exp2(0.25); // 2 ^ 1/4
 
@@ -180,48 +186,48 @@ async fn main() {
         let scroll = mouse_wheel().1;
         if scroll < 0.0 {
             if is_key_down(KeyCode::LeftControl) {
-                zoom *= 13.0 / 12.0;
-                render_size *= 13.0 / 12.0;
+                camera.zoom *= 13.0 / 12.0;
+                camera.render_size *= 13.0 / 12.0;
             } else if is_key_down(KeyCode::LeftShift) {
-                edge_width *= 12.0 / 13.0;
+                edge_settings.edge_width *= 12.0 / 13.0;
             } else {
-                render_size *= 12.0 / 13.0;
+                camera.render_size *= 12.0 / 13.0;
             }
         } else if scroll > 0.0 {
             if is_key_down(KeyCode::LeftControl) {
-                zoom *= 12.0 / 13.0;
-                render_size *= 12.0 / 13.0;
+                camera.zoom *= 12.0 / 13.0;
+                camera.render_size *= 12.0 / 13.0;
             } else if is_key_down(KeyCode::LeftShift) {
-                edge_width *= 13.0 / 12.0;
+                edge_settings.edge_width *= 13.0 / 12.0;
             } else {
-                render_size *= 13.0 / 12.0;
+                camera.render_size *= 13.0 / 12.0;
             }
         }
-        shape_position[2] = zoom;
+        shape_position[2] = camera.zoom;
 
         if is_key_down(KeyCode::Q) {
-            near += get_frame_time();
+            fade_planes.near += get_frame_time();
         }
         if is_key_down(KeyCode::A) {
-            near -= get_frame_time();
+            fade_planes.near -= get_frame_time();
         }
         if is_key_down(KeyCode::W) {
-            far += get_frame_time();
+            fade_planes.far += get_frame_time();
         }
         if is_key_down(KeyCode::S) {
-            far -= get_frame_time();
+            fade_planes.far -= get_frame_time();
         }
         if is_key_down(KeyCode::E) {
-            w_scale *= 1.0 - get_frame_time();
+            fade_planes.w_scale *= 1.0 - get_frame_time();
         }
         if is_key_down(KeyCode::D) {
-            w_scale *= 1.0 + get_frame_time();
+            fade_planes.w_scale *= 1.0 + get_frame_time();
         }
         if is_key_pressed(KeyCode::R) {
-            subdivisions += 1;
+            edge_settings.subdivisions = edge_settings.subdivisions.saturating_add(1);
         }
         if is_key_pressed(KeyCode::F) {
-            subdivisions = (subdivisions - 1).max(1);
+            edge_settings.subdivisions = edge_settings.subdivisions.saturating_sub(1);
         }
         if is_key_pressed(KeyCode::T) {
             // increases facet_expansion
@@ -232,7 +238,8 @@ async fn main() {
         if is_key_pressed(KeyCode::G) {
             // decreases facet_expansion
             scene.clear_polytope();
-            scene.facet_expansion = 1.0 - (1.0 - scene.facet_expansion) * facet_expansion_key_speed;
+            scene.facet_expansion =
+                (1.0 - scene.facet_expansion).mul_add(-facet_expansion_key_speed, 1.0);
             if scene.facet_expansion < 1.0 - 1.0 / facet_expansion_key_speed {
                 scene.facet_expansion = 0.0;
             }
@@ -291,15 +298,11 @@ async fn main() {
             // render the scene
             render(
                 &scene,
-                subdivisions,
                 &(&shape_matrix * &rotational_offset),
                 &shape_position,
-                edge_width,
-                near,
-                far,
-                zoom,
-                w_scale,
-                render_size,
+                edge_settings,
+                fade_planes,
+                camera,
                 Vec2::new(scene.resolution_vector.x, scene.resolution_vector.y),
             );
 
@@ -310,15 +313,11 @@ async fn main() {
         // render the scene to the screen
         render(
             &scene,
-            subdivisions,
             &(&shape_matrix * &rotational_offset),
             &shape_position,
-            edge_width,
-            near,
-            far,
-            zoom,
-            w_scale,
-            render_size,
+            edge_settings,
+            fade_planes,
+            camera,
             Vec2::new(screen_width(), screen_height()),
         );
 

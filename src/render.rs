@@ -61,20 +61,48 @@ pub fn draw_variable_width_line(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FadePlanes {
+    /// Fade start
+    pub near: f32,
+    /// Fade end
+    pub far: f32,
+    /// Extra-dimensional fade (how far you can see into what's perpendicular to XYZ)
+    pub w_scale: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EdgeSettings {
+    /// How wide the drawn edges are
+    pub edge_width: f32,
+    /// How much subdivisions the edges have
+    pub subdivisions: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CameraPerspective {
+    pub zoom: f32,
+    /// Multiplier of scale, helps with perspective
+    pub render_size: f32,
+}
+
 #[allow(clippy::cast_precision_loss)]
 pub fn render(
     scene: &Scene,
-    subdivisions: i32,
     shape_matrix: &DMatrix<f32>,
     shape_position: &DVector<f32>,
-    edge_width: f32,
-    near: f32,
-    far: f32,
-    zoom: f32,
-    w_scale: f32,
-    render_size: f32,
+    edge_settings: EdgeSettings,
+    fade_planes: FadePlanes,
+    camera: CameraPerspective,
     screen_size: Vec2,
 ) {
+    let EdgeSettings {
+        edge_width,
+        subdivisions,
+    } = edge_settings;
+    let FadePlanes { near, far, w_scale } = fade_planes;
+    let CameraPerspective { zoom, render_size } = camera;
+
     clear_background(BLACK);
 
     let mut local_space_vertices: Vec<DVector<f32>> = Vec::new();
@@ -92,7 +120,7 @@ pub fn render(
         let vertex_a = &local_space_vertices[scene.edges[i]];
         let vertex_b = &local_space_vertices[scene.edges[i + 1]];
 
-        for s in 0..subdivisions {
+        for s in (0..subdivisions) {
             let vertex_1 = vertex_a.lerp(vertex_b, (s as f32) / (subdivisions as f32));
             let vertex_2 = vertex_a.lerp(vertex_b, ((s + 1) as f32) / (subdivisions as f32));
 
