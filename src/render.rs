@@ -120,9 +120,9 @@ pub fn render(
         let vertex_a = &local_space_vertices[scene.edges[i]];
         let vertex_b = &local_space_vertices[scene.edges[i + 1]];
 
-        for s in (0..subdivisions) {
-            let vertex_1 = vertex_a.lerp(vertex_b, (s as f32) / (subdivisions as f32));
-            let vertex_2 = vertex_a.lerp(vertex_b, ((s + 1) as f32) / (subdivisions as f32));
+        for s in 0..subdivisions {
+            let vertex_1 = vertex_a.lerp(vertex_b, f32::from(s) / f32::from(subdivisions));
+            let vertex_2 = vertex_a.lerp(vertex_b, (f32::from(s) + 1.0) / f32::from(subdivisions));
 
             let radius_1 = (screen_size.y * edge_width) / vertex_1[2];
             let radius_2 = (screen_size.y * edge_width) / vertex_2[2];
