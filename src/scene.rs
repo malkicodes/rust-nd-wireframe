@@ -30,7 +30,7 @@ impl Scene {
                 toml::from_slice(&bytes).expect("error reading setup.toml");
 
             // convert SceneConfig -> Scene and return
-            let mut scene: Scene = scene_config.into();
+            let mut scene: Self = scene_config.into();
 
             if let Some(polytope_path) = given_polytope_path {
                 scene.polytope_path = polytope_path;
@@ -48,7 +48,7 @@ impl Scene {
         };
         let lines: Vec<&str> = setup_file_contents.lines().collect();
 
-        Scene {
+        Self {
             polytopes_folder: lines[0].into(),
             polytope_path: given_polytope_path.unwrap_or_else(|| lines[1].into()),
             resolution: lines[2].parse().unwrap(),
@@ -86,7 +86,7 @@ struct SceneConfig {
 impl From<SceneConfig> for Scene {
     #[allow(clippy::cast_precision_loss)]
     fn from(value: SceneConfig) -> Self {
-        Scene {
+        Self {
             polytopes_folder: value.polytopes_folder,
             polytope_path: value.polytope_path,
             resolution: value.animation.resolution,
