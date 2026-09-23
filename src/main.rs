@@ -1,3 +1,5 @@
+#![allow(clippy::cast_precision_loss)]
+
 use macroquad::audio::{load_sound_from_bytes, play_sound_once};
 use macroquad::miniquad::window::set_window_size;
 use macroquad::prelude::*;
