@@ -310,7 +310,7 @@ fn expand_facets(
         let mut facet_edges: Vec<usize> = vec![];
 
         get_vertices_from_element(
-            &polytope_data,
+            polytope_data,
             &mut facet_vertices,
             &mut facet_edges,
             scene.facet_expansion_rank,
