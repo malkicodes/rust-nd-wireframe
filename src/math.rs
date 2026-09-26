@@ -11,6 +11,11 @@ pub fn inverse_lerp(a: f32, b: f32, v: f32) -> f32 {
     (v - a) / (b - a)
 }
 
+#[inline]
+pub fn normalize(p: Vec2) -> Vec2 {
+    p / p.length_sq().sqrt()
+}
+
 pub fn rotate_matrix(
     axis_1: usize,
     axis_2: usize,
