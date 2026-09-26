@@ -1,4 +1,5 @@
 use nalgebra::{DMatrix, DVector};
+use sfml::cpp::FBox;
 use sfml::graphics::glsl::Vec2;
 use sfml::graphics::{Color, PrimitiveType, RenderStates, RenderTarget, Vertex};
 
@@ -7,7 +8,7 @@ use crate::math::{distance_from_nvolume, normalize, project_vertex};
 use crate::scene::Scene;
 
 pub fn draw_triangle_color(
-    target: &mut impl RenderTarget,
+    target: &mut FBox<impl RenderTarget>,
     v1: Vec2,
     v2: Vec2,
     v3: Vec2,
@@ -25,7 +26,7 @@ pub fn draw_triangle_color(
 }
 
 pub fn draw_variable_width_line(
-    target: &mut impl RenderTarget,
+    target: &mut FBox<impl RenderTarget>,
     start_point: Vec2,
     end_point: Vec2,
     start_radius: f32,
@@ -87,7 +88,7 @@ pub struct CameraPerspective {
 
 #[allow(clippy::cast_precision_loss)]
 pub fn render(
-    target: &mut impl RenderTarget,
+    target: &mut FBox<impl RenderTarget>,
     scene: &Scene,
     shape_matrix: &DMatrix<f32>,
     shape_position: &DVector<f32>,
