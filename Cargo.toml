@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+fastrand = "2.5.0"
 nalgebra = "0.35.0"
 serde = { version = "1.0.229", features = ["derive"] }
 sfml = "0.25.1"
