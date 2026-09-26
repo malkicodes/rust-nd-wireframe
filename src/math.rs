@@ -1,5 +1,15 @@
-use macroquad::math::Vec2;
 use nalgebra::{DMatrix, DVector};
+use sfml::graphics::glsl::Vec2;
+
+#[inline]
+pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + t * (b - a)
+}
+
+#[inline]
+pub fn inverse_lerp(a: f32, b: f32, v: f32) -> f32 {
+    (v - a) / (b - a)
+}
 
 pub fn rotate_matrix(
     axis_1: usize,

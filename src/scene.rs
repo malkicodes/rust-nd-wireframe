@@ -1,8 +1,8 @@
 use std::{fs, io, path::PathBuf};
 
-use macroquad::color::Color;
 use nalgebra::{DVector, Vector2};
 use serde::Deserialize;
+use sfml::graphics::Color;
 
 #[derive(Debug)]
 pub struct Scene {
